@@ -1,5 +1,19 @@
 import streamlit as st
+import duckdb
 import constants as c
+
+# --- DATABASE CONNECTION ---
+def get_bridge_data():
+    conn = duckdb.connect('impact_study.db')
+    # Fetch the specific bridge data from our new table
+    df = conn.execute("SELECT * FROM bridge_traffic LIMIT 1").df()
+    conn.close()
+    return df
+
+# Load the data from the DB
+bridge_df = get_bridge_data()
+passenger_vol = (bridge_df['adttotal'].iloc[0] * (100 - bridge_df['truckpct'].iloc[0])) / 100
+commercial_vol = (bridge_df['adttotal'].iloc[0] * bridge_df['truckpct'].iloc[0]) / 100
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Wyalusing Bridge Impact", page_icon="🌉", layout="wide")

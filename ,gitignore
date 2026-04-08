@@ -1,5 +1,6 @@
 # Ignore raw data files
 data/
+*.db
 
 # Ignore Python environment and cache
 __pycache__/
