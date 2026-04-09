@@ -10,10 +10,19 @@ def get_bridge_data():
     conn.close()
     return df
 
+def get_latest_fuel():
+    conn = duckdb.connect('impact_study.db')
+    row = conn.execute("SELECT gas_price, diesel_price FROM fuel_log ORDER BY timestamp DESC LIMIT 1").fetchone()
+    conn.close()
+
+    # Fallback to use hardcoded number if DB is empty
+    return row if row else (c.AVG_GAS_PRICE, c.AVG_DIESEL_PRICE)
+
 # Load the data from the DB
 bridge_df = get_bridge_data()
 passenger_vol = (bridge_df['adttotal'].iloc[0] * (100 - bridge_df['truckpct'].iloc[0])) / 100
 commercial_vol = (bridge_df['adttotal'].iloc[0] * bridge_df['truckpct'].iloc[0]) / 100
+live_gas, live_diesel = get_latest_fuel()
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Wyalusing Bridge Impact", page_icon="🌉", layout="wide")
@@ -33,7 +42,7 @@ with st.sidebar:
     st.info("Change these values to see how the total economic impact shifts.")
     
     # These sliders allow the user to perform their own 'Sensitivity Analysis'
-    gas_price = st.slider("Local Gas Price ($)", 3.00, 6.00, c.AVG_GAS_PRICE)
+    gas_price = st.sidebar.slider("Local Gas Price ($)", 3.00, 6.00, float(live_gas))
     detour_time = st.number_input("Detour Time (Minutes)", value=c.DETOUR_TIME_MINS)
     
     st.write("---")

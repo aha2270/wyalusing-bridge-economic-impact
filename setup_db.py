@@ -20,6 +20,14 @@ conn.execute("""
     );
 """)
 
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS fuel_log (
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        gas_price DOUBLE,
+        diesel_price DOUBLE
+    );
+""")
+
 # 3. Load the data from your CSV
 # DuckDB is 'CSV-native' - it can read the file and insert it in one move.
 # Adjust the path to match your actual CSV filename in the data folder.
@@ -39,5 +47,6 @@ else:
 # 4. Verify the data is there
 result = conn.execute("SELECT * FROM bridge_traffic").fetchall()
 print(f"Database contains {len(result)} record(s).")
+print("Fuel log table initialized.")
 
 conn.close()
