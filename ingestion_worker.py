@@ -3,6 +3,10 @@ import duckdb
 import requests
 from dotenv import load_dotenv
 import psycopg2
+import cloudscraper
+from bs4 import BeautifulSoup
+import time
+from playwright.sync_api import sync_playwright
 
 # Start by loading in secret key from .env
 load_dotenv()
@@ -190,14 +194,89 @@ def upload_to_supabase(gas, diesel):
 
 
 # Saves data to either cloud or local depedning on the toggle at top of script
-def save_data(gas,diesel):
-    if USE_CLOUD:
-        upload_to_supabase(gas, diesel)
-    else:
-        upload_to_duckdb(gas, diesel)
+def get_gas_price_patient(station_id):
+    url = f"https://www.gasbuddy.com/station/{station_id}"
+    
+    with sync_playwright() as p:
+        # 1. Launch a 'Headless' browser (no window pops up)
+        browser = p.chromium.launch(headless=True)
+        
+        # 2. Create a new page with a realistic 'fake mustache' (User-Agent)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+
+        print(f"Robot is sitting down at the table: {url}")
+
+        try:
+            # 3. Go to the URL
+            page.goto(url)
+
+            # 4. THE PATIENCE: Wait for the 'Waiter' to finish his job
+            # 'networkidle' waits until there are no more network requests for 500ms
+            print("Waiting for the waiter to bring the data...")
+            page.wait_for_load_state("networkidle")
+            
+            # Additional safety: wait a couple extra seconds just in case
+            time.sleep(2)
+
+            # 5. Grab the finished 'Table' (HTML) now that the cup is on it
+            html = page.content()
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # 6. Use our selector to find the price
+            # We look for the span that contains the price digits
+            price_tag = soup.select_one("span[class*='PriceDisplay-module__price']")
+
+            if price_tag:
+                raw_text = price_tag.text.strip().replace('$', '')
+                
+                # Check for the small 9 suffix or 'Cash' text
+                clean_text = raw_text.split()[0]
+
+                if clean_text == "---":
+                    print("Station found, but no price reported yet.")
+                    return None
+
+                print(f"Success! Found the cup: ${clean_text}")
+                return float(clean_text)
+            else:
+                print("Even with patience, the price tag didn't appear.")
+                return None
+
+        except Exception as e:
+            print(f"The robot got tired of waiting: {e}")
+            return None
+        finally:
+            browser.close()
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
+
+    dandy_id = "61479"
+    current_price = get_gas_price_patient(dandy_id)
+
+    if current_price:
+        print("\n--- SCRAPE SUCCESSFUL ---")
+        print(f"Station: Dandy Mini Mart (Wyalusing)")
+        print(f"Regular Gas Price: ${current_price}")
+        print("--------------------------")
+    else:
+        print("\n--- SCRAPE FAILED ---")
+        print("Check your connection or if the Station ID is still active.")
+
+
+    """
     print("Starting ingestion worker...")
     gas, diesel = get_fuel_prices()
     
@@ -207,3 +286,4 @@ if __name__ == "__main__":
         upload_to_supabase(gas, diesel)
     else:
         print(f"Price is still ${gas}. No update needed in Supabase")
+    """
