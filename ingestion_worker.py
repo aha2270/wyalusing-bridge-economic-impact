@@ -18,15 +18,19 @@ API_KEY = os.getenv("RAPIDAPI_KEY")
 # Toccgle between cloud and local
 USE_CLOUD = True
 
-
-
-
-# TODO: Add Comment Blocks For Each Function
-
-
-
 # API call for gas and diesel prices
 def fetch_pa_fuel_prices():
+    """
+    Retrieves the current average gasoline and diesel prices for the state of Pennsylvania.
+    
+    This function serves as the 'Control Data' source, allowing for a comparison 
+    between hyper-local Wyalusing prices and the broader state-wide economic baseline.
+    Note: Depends on the RapidAPI 'gas-price' endpoint.
+
+    Returns:
+        tuple: (gas_price, diesel_price) as floats. 
+               Returns (None, None) if the API call fails or limits are reached.
+    """
 
     # Targeting endpoint for just PA
     url = "https://gas-price.p.rapidapi.com/stateUsaPrice"
@@ -55,46 +59,19 @@ def fetch_pa_fuel_prices():
         return None, None
 
 
-
-
-
-
-
-
-# Hard coded numbers for testing (will be removed)
-def get_fuel_prices():
-    gas_price = 4.19
-    diesel_price = 5.99
-    return gas_price, diesel_price
-
-
-
-
-
-
-
-
-
-def get_latest_price_duckdb():
-    conn = duckdb.connect('impact_study.db')
-
-    # Checks if table exists before making call
-    table_check = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='fuel_log'").fetchone()
-
-    if not table_check:
-        conn.close()
-        return None
-    
-    result = conn.execute("SELECT gas_price FROM fuel_log ORDER BY timestamp DESC LIMIT 1").fetchone()
-    conn.close()
-    return result[0] if result else None
-
-
-
-
-
 def get_latest_price_supabase():
+    """
+    Queries the Supabase (PostgreSQL) production database for the most recent 
+    gasoline price record.
 
+    This function establishes the 'Current State' of the data warehouse, 
+    enabling validation checks and preventing redundant data ingestion. 
+    It uses a DESC LIMIT 1 optimization for high-performance retrieval.
+
+    Returns:
+        float: The most recent gas_price entry.
+        None: If the database is empty, the table is missing, or a connection error occurs.
+    """
     conn = None
     try:
         conn = psycopg2.connect(DB_URL)
@@ -116,48 +93,19 @@ def get_latest_price_supabase():
             conn.close()
 
 
-
-
-
-
-
-def upload_to_duckdb():
-    # 1. Extraction (Raw Data)
-    raw_gas, raw_diesel = fetch_pa_fuel_prices()
-    
-    if raw_gas is None:
-        return
-
-    # 2. Transformation (Normalization)
-    # We round once here. These are now our "Clean" variables.
-    current_gas = round(raw_gas, 3)
-    current_diesel = round(raw_diesel, 3)
-
-    # 3. Lookup (Historical Context)
-    last_raw_gas = get_latest_price_duckdb()
-    historical_gas = round(last_raw_gas, 3) if last_raw_gas else None
-
-    # 4. Comparison & Load
-    if historical_gas is None or current_gas != historical_gas:
-        conn = duckdb.connect('impact_study.db')
-        # We insert the ALREADY ROUNDED variables to keep the DB clean
-        conn.execute("INSERT INTO fuel_log (gas_price, diesel_price) VALUES (?, ?)", 
-                     [current_gas, current_diesel])
-        conn.close()
-        
-        print(f"Change detected! New price: ${current_gas} (Previous: ${historical_gas})")
-    else:
-        print(f"No price change detected (${current_gas}). Skipping database update.")
-
-
-
-
-
-
-
-
-
 def upload_to_supabase(gas, diesel):
+    """
+    Orchestrates the 'Load' phase of the ETL pipeline by inserting 
+    fuel price data into the Supabase cloud database.
+
+    Args:
+        gas (float): The cleaned gasoline price to be stored.
+        diesel (float): The cleaned diesel price (manual or baseline) to be stored.
+
+    Note:
+        Requires a valid DB_URL environment variable and the psycopg2 driver.
+        Implements transaction management to ensure data persistence.
+    """
     conn = None
 
     try:
@@ -184,14 +132,6 @@ def upload_to_supabase(gas, diesel):
     finally:
         if conn:
             conn.close()
-
-
-
-
-
-
-
-
 
 # Saves data to either cloud or local depedning on the toggle at top of script
 def get_gas_price_patient(station_id):
@@ -251,39 +191,33 @@ def get_gas_price_patient(station_id):
         finally:
             browser.close()
 
+def main():
+    """
+    Main Orchestrator:
+    1. Scrapes real-time data using the 'Patient' Playwright robot.
+    2. Queries the cloud for the most recent historical record.
+    3. Performs a Change Data Capture (CDC) check.
+    4. Executes the cloud upload only if a price shift is detected.
+    """
+    dandy_id = "61479"
+    current_gas = get_gas_price_patient(dandy_id)
+    current_diesel = 5.99
 
+    if current_gas is None:
+        print("Error: Scraper failed to find a price. Aborting run")
+        return None 
 
+    last_cloud_price = get_latest_price_supabase()
 
+    if last_cloud_price is None or current_gas != last_cloud_price:
+        print(f"Change Detected: Live (${current_gas}) vs Cloud (${last_cloud_price})")
 
-
-
+        upload_to_supabase(current_gas, current_diesel)
+    else:
+        print(f"Data Synchronized: Real-time price (${current_gas}) matches Supabase record. No upload required.")
 
 
 
 
 if __name__ == "__main__":
-
-    dandy_id = "61479"
-    current_price = get_gas_price_patient(dandy_id)
-
-    if current_price:
-        print("\n--- SCRAPE SUCCESSFUL ---")
-        print(f"Station: Dandy Mini Mart (Wyalusing)")
-        print(f"Regular Gas Price: ${current_price}")
-        print("--------------------------")
-    else:
-        print("\n--- SCRAPE FAILED ---")
-        print("Check your connection or if the Station ID is still active.")
-
-
-    """
-    print("Starting ingestion worker...")
-    gas, diesel = get_fuel_prices()
-    
-    last_price = get_latest_price_supabase()
-
-    if last_price is None or gas != last_price:
-        upload_to_supabase(gas, diesel)
-    else:
-        print(f"Price is still ${gas}. No update needed in Supabase")
-    """
+    main()
