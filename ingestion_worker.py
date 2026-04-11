@@ -1,11 +1,12 @@
+# Standard Libraries
 import os
-import duckdb
+import time
+
+# Third-Party Libraries
 import requests
 from dotenv import load_dotenv
 import psycopg2
-import cloudscraper
 from bs4 import BeautifulSoup
-import time
 from playwright.sync_api import sync_playwright
 
 # Start by loading in secret key from .env
@@ -14,9 +15,6 @@ load_dotenv()
 # Hidden passwords used for database and API calls
 DB_URL = os.getenv("SUPABASE_CONN_STRING")
 API_KEY = os.getenv("RAPIDAPI_KEY")
-
-# Toccgle between cloud and local
-USE_CLOUD = True
 
 # API call for gas and diesel prices
 def fetch_pa_fuel_prices():
@@ -133,40 +131,39 @@ def upload_to_supabase(gas, diesel):
         if conn:
             conn.close()
 
-# Saves data to either cloud or local depedning on the toggle at top of script
-def get_gas_price_patient(station_id):
+def get_gas_price_playwright(station_id):
     url = f"https://www.gasbuddy.com/station/{station_id}"
     
     with sync_playwright() as p:
-        # 1. Launch a 'Headless' browser (no window pops up)
+        # Launch a headless browser (no window pops up)
         browser = p.chromium.launch(headless=True)
         
-        # 2. Create a new page with a realistic 'fake mustache' (User-Agent)
+        # Create a new realistic page
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
         )
         page = context.new_page()
 
-        print(f"Robot is sitting down at the table: {url}")
+        print(f"Script is going to site: {url}")
 
         try:
-            # 3. Go to the URL
+            # Go to the URL
             page.goto(url)
 
-            # 4. THE PATIENCE: Wait for the 'Waiter' to finish his job
+            # Wait for the data to load
             # 'networkidle' waits until there are no more network requests for 500ms
-            print("Waiting for the waiter to bring the data...")
+            print("Waiting for the data...")
             page.wait_for_load_state("networkidle")
             
             # Additional safety: wait a couple extra seconds just in case
             time.sleep(2)
 
-            # 5. Grab the finished 'Table' (HTML) now that the cup is on it
+            # Grab the rully loaded HTML
             html = page.content()
             soup = BeautifulSoup(html, 'html.parser')
 
-            # 6. Use our selector to find the price
-            # We look for the span that contains the price digits
+            # Use our selector to find the price
+            # Look for the span that contains the price digits
             price_tag = soup.select_one("span[class*='PriceDisplay-module__price']")
 
             if price_tag:
@@ -179,7 +176,7 @@ def get_gas_price_patient(station_id):
                     print("Station found, but no price reported yet.")
                     return None
 
-                print(f"Success! Found the cup: ${clean_text}")
+                print(f"Success! Found the price: ${clean_text}")
                 return float(clean_text)
             else:
                 print("Even with patience, the price tag didn't appear.")
@@ -200,7 +197,7 @@ def main():
     4. Executes the cloud upload only if a price shift is detected.
     """
     dandy_id = "61479"
-    current_gas = get_gas_price_patient(dandy_id)
+    current_gas = get_gas_price_playwright(dandy_id)
     current_diesel = 5.99
 
     if current_gas is None:

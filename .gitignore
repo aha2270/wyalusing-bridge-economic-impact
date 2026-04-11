@@ -6,6 +6,7 @@ data/
 __pycache__/
 .venv/
 .env
+*.db
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
