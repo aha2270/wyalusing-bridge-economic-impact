@@ -1,13 +1,14 @@
 # Front Facing Webpage
 streamlit
 
+# Database & Cloud
+supabase
+pandas
+
 # Web Scraping
 playwright
 beautifulsoup4
 
-# Database & Cloud
-psycopg2-binary
-
-# API and Utilities
-requests
+# Utilities
 python-dotenv
+requests

@@ -1,220 +1,49 @@
-# Standard Libraries
 import os
-import time
-
-# Third-Party Libraries
-import requests
-from dotenv import load_dotenv
-import psycopg2
+from datetime import datetime
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-# Start by loading in secret key from .env
 load_dotenv()
+supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# Hidden passwords used for database and API calls
-DB_URL = os.getenv("SUPABASE_CONN_STRING")
-API_KEY = os.getenv("RAPIDAPI_KEY")
-
-# API call for gas and diesel prices
-def fetch_pa_fuel_prices():
-    """
-    Retrieves the current average gasoline and diesel prices for the state of Pennsylvania.
-    
-    This function serves as the 'Control Data' source, allowing for a comparison 
-    between hyper-local Wyalusing prices and the broader state-wide economic baseline.
-    Note: Depends on the RapidAPI 'gas-price' endpoint.
-
-    Returns:
-        tuple: (gas_price, diesel_price) as floats. 
-               Returns (None, None) if the API call fails or limits are reached.
-    """
-
-    # Targeting endpoint for just PA
-    url = "https://gas-price.p.rapidapi.com/stateUsaPrice"
-    querystring = {"state": "PA"}
-
-    headers = {
-        "X-RapidAPI-Key": API_KEY,
-        "X-RapidAPI-Host": "gas-price.p.rapidapi.com"
-    }
-
-    try: 
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
-        response.raise_for_status() # Triggers if API is down
-        data = response.json()
-
-        # Debugging
-        state_list = data['result']['state']
-
-        # Since API gives data as string, we must convert to floats
-        gas = float(state_list[0]['gasoline'])
-        diesel = float(state_list[0]['diesel'])
-
-        return gas, diesel
-    except Exception as e:
-        print(f"API Call Failed: {e}")
-        return None, None
-
-
-def get_latest_price_supabase():
-    """
-    Queries the Supabase (PostgreSQL) production database for the most recent 
-    gasoline price record.
-
-    This function establishes the 'Current State' of the data warehouse, 
-    enabling validation checks and preventing redundant data ingestion. 
-    It uses a DESC LIMIT 1 optimization for high-performance retrieval.
-
-    Returns:
-        float: The most recent gas_price entry.
-        None: If the database is empty, the table is missing, or a connection error occurs.
-    """
-    conn = None
-    try:
-        conn = psycopg2.connect(DB_URL)
-        cur = conn.cursor()
-
-        # Query to grab most recent entry in database
-        query = "SELECT gas_price FROM fuel_log ORDER BY timestamp DESC LIMIT 1;"
-        cur.execute(query)
-
-        result = cur.fetchone()
-        cur.close()
-
-        return float(result[0]) if result else None
-    except Exception as e:
-        print(f"Cloud Lookup Error: {e}")
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-
-def upload_to_supabase(gas, diesel):
-    """
-    Orchestrates the 'Load' phase of the ETL pipeline by inserting 
-    fuel price data into the Supabase cloud database.
-
-    Args:
-        gas (float): The cleaned gasoline price to be stored.
-        diesel (float): The cleaned diesel price (manual or baseline) to be stored.
-
-    Note:
-        Requires a valid DB_URL environment variable and the psycopg2 driver.
-        Implements transaction management to ensure data persistence.
-    """
-    conn = None
-
-    try:
-        # Establish connection
-        conn = psycopg2.connect(DB_URL)
-        cur = conn.cursor()
-
-        # Prepare the SQL
-        insert_query = """
-        INSERT INTO fuel_log (gas_price, diesel_price)
-        VALUES (%s, %s);
-        """
-
-        cur.execute(insert_query, (gas, diesel))
-        conn.commit()
-
-        print(f"Success! Ingested Gas: ${gas}, Diesel: ${diesel}")
-
-        cur.close()
-    
-    except Exception as e:
-        print(f"Database Error: {e}")
-    
-    finally:
-        if conn:
-            conn.close()
-
-def get_gas_price_playwright(station_id):
-    url = f"https://www.gasbuddy.com/station/{station_id}"
+def harvest_state_benchmark():
+    print(f"📡 Harvesting PA State Benchmark: {datetime.now().strftime('%H:%M:%S')}")
     
     with sync_playwright() as p:
-        # Launch a headless browser (no window pops up)
         browser = p.chromium.launch(headless=True)
-        
-        # Create a new realistic page
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
-
-        print(f"Script is going to site: {url}")
+        page = browser.new_page()
 
         try:
-            # Go to the URL
-            page.goto(url)
-
-            # Wait for the data to load
-            # 'networkidle' waits until there are no more network requests for 500ms
-            print("Waiting for the data...")
-            page.wait_for_load_state("networkidle")
+            page.goto("https://gasprices.aaa.com/?state=PA", wait_until="domcontentloaded")
             
-            # Additional safety: wait a couple extra seconds just in case
-            time.sleep(2)
-
-            # Grab the rully loaded HTML
             html = page.content()
             soup = BeautifulSoup(html, 'html.parser')
+            
+            # Find the 'Current Avg.' row in the main state table
+            anchor = soup.find('td', string='Current Avg.')
+            if anchor:
+                cells = anchor.find_next_siblings('td')
+                gas_avg = float(cells[0].text.strip().replace('$', ''))
+                diesel_avg = float(cells[3].text.strip().replace('$', ''))
 
-            # Use our selector to find the price
-            # Look for the span that contains the price digits
-            price_tag = soup.select_one("span[class*='PriceDisplay-module__price']")
-
-            if price_tag:
-                raw_text = price_tag.text.strip().replace('$', '')
+                # Push the single benchmark record
+                # Note: We use .insert() here so you can build a history log over time!
+                payload = {
+                    "gas_price": gas_avg,
+                    "diesel_price": diesel_avg
+                }
                 
-                # Check for the small 9 suffix or 'Cash' text
-                clean_text = raw_text.split()[0]
-
-                if clean_text == "---":
-                    print("Station found, but no price reported yet.")
-                    return None
-
-                print(f"Success! Found the price: ${clean_text}")
-                return float(clean_text)
+                supabase.table("state_fuel_benchmarks").insert(payload).execute()
+                print(f"✅ Success! State Benchmark Updated: Gas ${gas_avg}, Diesel ${diesel_avg}")
             else:
-                print("Even with patience, the price tag didn't appear.")
-                return None
+                print("❌ Failure: Could not locate the 'Current Avg.' row.")
 
         except Exception as e:
-            print(f"The robot got tired of waiting: {e}")
-            return None
+            print(f"❌ Harvester Error: {e}")
         finally:
             browser.close()
 
-def main():
-    """
-    Main Orchestrator:
-    1. Scrapes real-time data using the 'Patient' Playwright robot.
-    2. Queries the cloud for the most recent historical record.
-    3. Performs a Change Data Capture (CDC) check.
-    4. Executes the cloud upload only if a price shift is detected.
-    """
-    dandy_id = "61479"
-    current_gas = get_gas_price_playwright(dandy_id)
-    current_diesel = 5.99
-
-    if current_gas is None:
-        print("Error: Scraper failed to find a price. Aborting run")
-        return None 
-
-    last_cloud_price = get_latest_price_supabase()
-
-    if last_cloud_price is None or current_gas != last_cloud_price:
-        print(f"Change Detected: Live (${current_gas}) vs Cloud (${last_cloud_price})")
-
-        upload_to_supabase(current_gas, current_diesel)
-    else:
-        print(f"Data Synchronized: Real-time price (${current_gas}) matches Supabase record. No upload required.")
-
-
-
-
 if __name__ == "__main__":
-    main()
+    harvest_state_benchmark()
