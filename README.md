@@ -1,16 +1,18 @@
-# Wyalusing Bridge Impact Study: Fuel Price Ingestion Pipeline
+# Pennsylvania Bridge Economic Impact Dashboard
 
-## 📌 Project Goal
-This project aims to quantify the economic "Bridge Tax" imposed on the local community of Wyalusing, PA, following the closure of the main bridge. By monitoring real-time fuel price fluctuations at local stations vs. state-wide averages, this study will provide a data-driven look at how logistical detours impact local commerce.
+## 📌 Project Overview
+This project provides a state-wide analytical tool to quantify the economic "Bridge Tax" resulting from infrastructure failures. Originally conceived as a study for Wyalusing, PA, the platform has evolved into a **Universal Bridge Impact Calculator** covering 56,000+ bridges across the Commonwealth of Pennsylvania.
 
-## 🚀 What We Are Doing
-We are building a "Smart" Data Pipeline that automates the collection of fuel prices to build a longitudinal dataset for analysis.
+By integrating PennDOT traffic data with automated AAA fuel benchmarks, the dashboard calculates the real-time daily cost burden placed on local economies when a bridge closure forces logistical detours.
 
-* **Ingestion:** A browser-automation script (using Playwright) handles dynamic web content to scrape live prices from GasBuddy station IDs.
-* **Storage:** Data is normalized and stored in a **Supabase (PostgreSQL)** cloud database.
-* **Logic:** The system utilizes Change Data Capture (CDC) logic to compare live prices against the most recent database entry, preventing redundant writes.
-* **Automation:** Over the next few months, **GitHub Actions** will trigger this pipeline daily.
-* **Visualization:** A **Streamlit** dashboard will be developed to display these findings and perform final analytical comparisons.
+## 🚀 The Data Engineering Pipeline
+We have built a resilient, cloud-native ETL pipeline designed for high uptime and minimal technical debt.
+
+* **Ingestion:** An automated **Playwright** harvester scrapes daily state-wide fuel benchmarks from AAA. To ensure resilience against upstream UI changes, the pipeline utilizes a heuristic "search and rescue" logic to identify data anchors within dynamic iframes.
+* **Storage:** A normalized **Supabase (PostgreSQL)** database houses 56,000+ bridge infrastructure records and a historical log of fuel benchmarks.
+* **Analysis:** The system calculates economic impact using a dual-vehicle modal:
+    $$\text{Daily Cost} = \left(\text{Car Vol} \times \frac{\text{Miles}}{\text{15 MPG}} \times \text{Gas Price}\right) + \left(\text{Truck Vol} \times \frac{\text{Miles}}{\text{6 MPG}} \times \text{Diesel Price}\right)$$
+* **Visualization:** A **Streamlit** dashboard allows users to search any bridge in PA and perform real-time "What-If" scenario analysis.
 
 ---
 
@@ -30,24 +32,35 @@ playwright install chromium
 ```
 
 ### 3. Database Initialization
-This project is compatible with any PostgreSQL database. To set up your cloud and local database, execute the commands found in `schema.sql` within you SQL editor to initalize the `fuel_log` table
+This project is compatible with any PostgreSQL database. To set up your cloud and local database, execute the commands found in `schema.sql` within you SQL editor to initalize the `bridge_traffic_stats` and `state_fuel_benchmark` tables
 
 ---
 
-## 🔐 Configuration
-To run this project loccally, you must stup up your environment variables:
+## 🔐 Configuration (Secrets Management)
+This project uses Streamlit Secrets to protect sensitive cloud credentials.
 
-1. Copy the `.env.example` file and rename it to `.env`
-2. Fill in your specific **DB_URL** (PostgreSQL connection string) and API_KEY (RapidAPI key).
+1. Create a folder named `.streamlit` in the root directory.
+2. Create a file named `secrets.toml` inside that folder.
+3. Add your credentials:
+
+```
+SUPABASE_URL = "your_supabase_url"
+SUPABASE_KEY = "your_anon_key"
+```
 
 Note: The `.env` file is ignored by Git to ensure your credentials remain secure.
 
 ---
 
 ## 📈 Roadmap
-* [x] Web Scraper (Playwright/BeautifulSoup)
-* [x] Cloud Database Integration (PostgreSQL)
-* [x] Change Data Capture (CDC) Logic
-* [ ] Manual Diesel Input (Hybrid Path)
-* [ ] Automated Scheduling (GitHub Actions)
-* [ ] Data Analysis & Findings
+- [x] Phase 1: Local Case Study (Wyalusing, PA)
+
+- [x] Phase 2: Cloud Database Integration & ETL Refactoring
+
+- [x] Phase 3: Automated AAA State-Wide Harvester (Resilient Scraping)
+
+- [x] Phase 4: Universal Dashboard Deployment (56k Bridges)
+
+- [ ] Phase 5: Historical Trend Analysis (Time-Series Fuel Tracking)
+
+- [ ] Phase 6: Automated CI/CD (GitHub Actions)
