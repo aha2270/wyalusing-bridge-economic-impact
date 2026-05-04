@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
 from supabase import create_client, Client
 
 # --- 1. SETUP & CLOUD CONNECTION ---
@@ -9,6 +11,15 @@ key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
 st.set_page_config(page_title="PA Bridge Impact Calculator", layout="wide")
+
+def get_historical_trends():
+    # Pulling the key metrics ordered by time
+    response = supabase.table("state_fuel_benchmarks") \
+        .select("updated_at, gas_price, diesel_price") \
+        .order("updated_at", desc=False) \
+        .execute()
+    
+    return pd.DataFrame(response.data)
 
 # --- 2. DATA FETCHING (CACHED) ---
 @st.cache_data
@@ -93,3 +104,91 @@ Over a year, this results in an economic burden of **${(daily_cost * 365):,.2f}*
 # Technical Details for the Portfolio
 with st.expander("View Infrastructure & Technical Data"):
     st.json(bridge_details)
+
+
+st.divider()
+st.header("📊 State-Wide Fuel Price Trends")
+st.caption("Tracking daily benchmarks to quantify infrastructure economic shifts over time.")
+
+# Pull the real data
+df_trends = get_historical_trends()
+
+if not df_trends.empty:
+    # 1. Prepare the data
+    df_trends['updated_at'] = pd.to_datetime(df_trends['updated_at'])
+    
+    # 2. Melt for Plotly (Fuel Type becomes a category)
+    df_melted = df_trends.melt(
+        id_vars='updated_at', 
+        value_vars=['gas_price', 'diesel_price'],
+        var_name='Fuel Type', 
+        value_name='Price ($)'
+    )
+
+    df_melted['Fuel Type'] = df_melted['Fuel Type'].map({
+    "gas_price": "Gasoline",
+    "diesel_price": "Diesel"
+    })
+
+    # 3. Create the Visual
+    fig = px.line(
+        df_melted, 
+        x='updated_at', 
+        y='Price ($)', 
+        color='Fuel Type',
+        # Industry Standard Palette: Deep Blue and Safety Orange
+        color_discrete_map={
+            "Gasoline": "#0072B2", 
+            "Diesel": "#E69F00"
+        },
+        template="plotly_dark",
+        markers=True
+    )
+
+    # 4. Apply the Double-Encoding (Solid vs Dashed)
+    fig.update_traces(line=dict(dash='solid'), selector={"name": "Gasoline"})
+    fig.update_traces(line=dict(dash='dash'), selector={"name": "Diesel"})
+
+    # 5. Final Styling
+    fig.update_layout(
+        hovermode="x unified",
+        xaxis_title="Date Collected",
+        yaxis_title="Price per Gallon ($)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    fig.update_xaxes(
+    # 1. Label Positioning & Readability
+    tickangle=45,           # Dynamically angles text only if it gets crowded
+    tickfont=dict(size=10),     # Keeps it professional and non-distracting
+    automargin=True,            # Prevents labels from being cut off by the container
+    tickformat="%b %d",         # Minimalist 'Month Day' format
+    nticks=10,                  # Prevents initial load 'clumping'
+
+    # 2. Interactive Navigation (The Range Slider)
+    rangeslider_visible=True,
+    
+    # 3. Quick-Action Zoom Buttons
+    rangeselector=dict(
+        buttons=list([
+            dict(count=7, label="1 WEEK", step="day", stepmode="backward"),
+            dict(count=1, label="1 MONTH", step="month", stepmode="backward"),
+            dict(label="ALL", step="all")
+        ]),
+        x=0.05,
+        y=1.1,
+        activecolor="#0072B2",
+        bgcolor="rgba(0,0,0,0)", # Transparent background to match dark mode
+        font=dict(color="white")  # Ensures buttons pop against the dark theme
+        )
+    )
+
+    fig.update_yaxes(
+    range=[3.5, 6.5], 
+    tickformat="$.2f", 
+    gridcolor='rgba(255, 255, 255, 0.1)'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Trend analysis will appear here as more daily data is collected.")

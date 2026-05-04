@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import pandas as pd
 
 import subprocess
 
@@ -15,7 +16,6 @@ except ImportError:
 
 # This tells the server to download the necessary browser binaries
 subprocess.run(["playwright", "install", "chromium"])
-
 
 load_dotenv()
 supabase: Client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
