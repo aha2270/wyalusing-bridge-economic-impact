@@ -1,4 +1,4 @@
-# 🌉 Pennsylvania Bridge Economic Impact & Fuel Trend Analyzer
+# Pennsylvania Bridge Economic Impact & Fuel Trend Analyzer
 
 View the live dashboard here: https://pa-bridge-impact-calculator.streamlit.app/
 
@@ -6,7 +6,7 @@ A production-ready data pipeline that quantifies the daily economic burden of in
 
 ---
 
-# 🏗️ System Architecture
+# System Architecture
 
 This project is an end-to-end data engineering solution that automates the lifecycle of a record from ingestion to visualization
 
@@ -17,7 +17,7 @@ This project is an end-to-end data engineering solution that automates the lifec
 
 ---
 
-# 🚀 Key Engineering Features
+# Key Engineering Features
 
 1. **Automated ETL Pipeline**
 
@@ -41,7 +41,7 @@ This project is an end-to-end data engineering solution that automates the lifec
 
 ---
 
-# 🛠️ Tech Stack
+# Tech Stack
 
 * **Language**: Python
 * **Cloud Backend**: Supabase (PostgreSQL)
@@ -51,13 +51,13 @@ This project is an end-to-end data engineering solution that automates the lifec
 
 ---
 
-# 🗺️ Roadmap & Future Scope
+# Roadmap & Future Scope
 
 * **Predictive Modeling**: Using historical data to forecast future economic burdens based on price trend
 
 ---
 
-# ⚙️ Local Deployment
+# Local Deployment
 
 To run this project locally for testing or development:
 

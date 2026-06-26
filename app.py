@@ -41,7 +41,7 @@ def get_latest_fuel_benchmark():
     return {"gas_price": 3.50, "diesel_price": 4.10} # Fallback defaults
 
 # --- 3. THE UI SIDEBAR (INPUTS) ---
-st.sidebar.header("🛠️ Calculator Settings")
+st.sidebar.header("Calculator Settings")
 
 # Bridge Selection
 bridge_df = get_bridge_list()
@@ -65,7 +65,7 @@ avg_speed = st.sidebar.slider("Avg Detour Speed (MPH)", 25, 55, 35)
 
 # Fuel Benchmark
 fuel = get_latest_fuel_benchmark()
-st.sidebar.info(f"⛽ Using PA State Average:\nGas: ${fuel['gas_price']} | Diesel: ${fuel['diesel_price']}")
+st.sidebar.info(f"Using PA State Average:\nGas: ${fuel['gas_price']} | Diesel: ${fuel['diesel_price']}")
 
 # --- 4. THE CALCULATION LOGIC ---
 # Traffic Stats
@@ -81,7 +81,7 @@ fuel_consumed = (car_vol * (detour_miles / 15)) + (truck_vol * (detour_miles / 6
 daily_cost = (car_vol * (detour_miles / 15) * fuel['gas_price']) + (truck_vol * (detour_miles / 6) * fuel['diesel_price'])
 
 # --- 5. THE DASHBOARD DISPLAY ---
-st.title("🌉 Pennsylvania Bridge Impact Calculator")
+st.title("Pennsylvania Bridge Impact Calculator")
 st.subheader(f"Scenario Analysis: {selected_label}")
 
 col1, col2, col3 = st.columns(3)
@@ -107,7 +107,7 @@ with st.expander("View Infrastructure & Technical Data"):
 
 
 st.divider()
-st.header("📊 State-Wide Fuel Price Trends")
+st.header("State-Wide Fuel Price Trends")
 st.caption("Tracking daily benchmarks to quantify infrastructure economic shifts over time.")
 
 # Pull the real data
